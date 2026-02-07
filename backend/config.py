@@ -1,6 +1,6 @@
 import os
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 # IST = UTC+5:30 → offset in seconds for lightweight-charts display
 IST_OFFSET_SEC = 5 * 3600 + 30 * 60  # 19800
