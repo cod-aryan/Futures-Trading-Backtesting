@@ -42,6 +42,8 @@ export default function useMarketData(initialSymbol = "BTCUSDT", initialTimefram
         const { records, total } = await fetchOHLCV(selectedSymbol, timeframe, PAGE_SIZE);
         if (cancelled) return;
         totalRef.current = total;
+        // Sort to guarantee ascending time order
+        records.sort((a, b) => a.time - b.time);
         setOhlcvData(records);
         setHasMore(records.length < total);
         if (records.length > 0) {
@@ -73,15 +75,24 @@ export default function useMarketData(initialSymbol = "BTCUSDT", initialTimefram
       if (records.length === 0) {
         setHasMore(false);
       } else {
-        // Filter out any overlap
-        const existingFirstTime = ohlcvData[0].time;
-        const newCandles = records.filter((r) => r.time < existingFirstTime);
-        if (newCandles.length === 0) {
+        let noNew = false;
+        setOhlcvData((prev) => {
+          // Filter against the CURRENT state, not the stale closure
+          const existingFirstTime = prev.length > 0 ? prev[0].time : Infinity;
+          const newCandles = records.filter((r) => r.time < existingFirstTime);
+          if (newCandles.length === 0) {
+            noNew = true;
+            return prev;
+          }
+          // Sort the combined array to guarantee ascending time order
+          const combined = [...newCandles, ...prev];
+          combined.sort((a, b) => a.time - b.time);
+          return combined;
+        });
+        if (noNew) {
           setHasMore(false);
-        } else {
-          setOhlcvData((prev) => [...newCandles, ...prev]);
-          // If we got fewer than requested, no more data
-          if (newCandles.length < PAGE_SIZE) setHasMore(false);
+        } else if (records.length < PAGE_SIZE) {
+          setHasMore(false);
         }
       }
     } catch (e) {

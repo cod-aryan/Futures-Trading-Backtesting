@@ -14,7 +14,7 @@ load_dotenv()
 # Then modify the middleware:
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:3000")],
+    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:3000"), "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -39,4 +39,3 @@ async def get_ohlcv(
 
     records = format_ohlcv_records(df_slice)
     return {"data": records, "total": total}
-    return {"data": records, "total": total}

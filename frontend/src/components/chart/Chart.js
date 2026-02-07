@@ -389,10 +389,14 @@ export default function Chart({
     let savedTimeRange = null;
     try { savedTimeRange = ts?.getVisibleRange?.() ?? null; } catch (_) {}
 
-    candleSeriesRef.current.setData(data);
+    // Sort by time and deduplicate to guarantee strictly ascending order
+    // (prevents Lightweight Charts assertion error)
+    const sorted = [...data].sort((a, b) => a.time - b.time);
+    const deduped = sorted.filter((d, i) => i === 0 || d.time !== sorted[i - 1].time);
+    candleSeriesRef.current.setData(deduped);
     if (volumeSeriesRef.current) {
       volumeSeriesRef.current.setData(
-        data.map((d) => {
+        deduped.map((d) => {
           const c = getThemeChartColors();
           return {
             time: d.time, value: d.volume,
@@ -448,12 +452,14 @@ export default function Chart({
       candleSeriesRef.current.applyOptions(getCandleSeriesOptions());
       if (volumeSeriesRef.current) {
         volumeSeriesRef.current.applyOptions(getVolumeSeriesOptions());
-        // Re-color existing volume bars
+        // Re-color existing volume bars (sort + dedup for safety)
         const d = dataRef.current;
         if (d?.length) {
           const c = getThemeChartColors();
+          const sortedBars = [...d].sort((a, b) => a.time - b.time);
+          const dedupedBars = sortedBars.filter((b, i) => i === 0 || b.time !== sortedBars[i - 1].time);
           volumeSeriesRef.current.setData(
-            d.map((bar) => ({
+            dedupedBars.map((bar) => ({
               time: bar.time, value: bar.volume,
               color: bar.close >= bar.open ? c.volumeUp : c.volumeDown,
             }))
