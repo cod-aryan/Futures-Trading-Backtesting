@@ -1,147 +1,140 @@
 "use client";
 
-const TOOLS = [
-  { id: "horizontal", label: "H-Line", icon: "─", title: "Horizontal Line" },
-  { id: "trendline", label: "Trend", icon: "╱", title: "Trend Line" },
-  { id: "ray", label: "Ray", icon: "→", title: "Ray" },
-  { id: "fib", label: "Fib", icon: "ƒ", title: "Fibonacci Retracement" },
-  { id: "long-position", label: "Long", icon: "▲", title: "Long Position (Entry → SL → TP)", color: "#26a69a" },
-  { id: "short-position", label: "Short", icon: "▼", title: "Short Position (Entry → SL → TP)", color: "#ef5350" },
-];
-
 /**
- * Floating vertical toolbar for selecting drawing tools.
- * Positioned on the left side of the chart, TradingView-style.
+ * Drawing tools toolbar with delete/clear controls.
  */
 export default function DrawingToolbar({
   activeTool,
+  selectedId,
   stepLabel,
+  canUndo,
+  canRedo,
   onSelectTool,
-  onClear,
+  onRemoveSelected,
+  onClearAll,
   onUndo,
+  onRedo,
 }) {
+  const tools = [
+    { id: "horizontal", label: "─", title: "Horizontal Line" },
+    { id: "trendline", label: "╲", title: "Trend Line" },
+    { id: "ray", label: "→", title: "Ray" },
+    { id: "fib", label: "Fib", title: "Fibonacci Retracement" },
+    { id: "long-position", label: "▲ Long", title: "Long Position" },
+    { id: "short-position", label: "▼ Short", title: "Short Position" },
+  ];
+
+  const btnBase = {
+    padding: "5px 10px",
+    borderRadius: 4,
+    border: "1px solid var(--border-color)",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "all 0.15s",
+  };
+
   return (
     <div
       style={{
-        position: "absolute",
-        top: 8,
-        left: 8,
-        zIndex: 20,
         display: "flex",
-        flexDirection: "column",
-        gap: 2,
+        alignItems: "center",
+        gap: 4,
+        padding: "4px 8px",
         background: "var(--bg-secondary)",
-        border: "1px solid var(--border-color)",
-        borderRadius: 6,
-        padding: 4,
-        boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+        borderBottom: "1px solid var(--border-color)",
+        flexWrap: "wrap",
+        minHeight: 36,
       }}
     >
-      {TOOLS.map((tool) => (
+      {tools.map((t) => (
         <button
-          key={tool.id}
-          title={tool.title}
-          onClick={() => onSelectTool(tool.id)}
+          key={t.id}
+          title={t.title}
+          onClick={() => onSelectTool(t.id)}
           style={{
-            width: 36,
-            height: 32,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background:
-              activeTool === tool.id
-                ? "var(--accent-blue)"
-                : "transparent",
-            color: tool.color
-              ? activeTool === tool.id
-                ? "#fff"
-                : tool.color
-              : activeTool === tool.id
-              ? "#fff"
-              : "var(--text-secondary)",
-            borderRadius: 4,
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: "pointer",
-            border: "none",
-            transition: "all 0.12s",
+            ...btnBase,
+            background: activeTool === t.id ? "var(--accent-blue)" : "var(--bg-primary)",
+            color: activeTool === t.id ? "#fff" : "var(--text-secondary)",
+            borderColor: activeTool === t.id ? "var(--accent-blue)" : "var(--border-color)",
           }}
         >
-          {tool.icon}
+          {t.label}
         </button>
       ))}
 
-      {/* Divider */}
-      <div
-        style={{
-          height: 1,
-          background: "var(--border-color)",
-          margin: "2px 0",
-        }}
-      />
+      <div style={{ width: 1, height: 20, background: "var(--border-color)", margin: "0 4px" }} />
 
-      {/* Undo */}
+      {/* Undo / Redo */}
       <button
-        title="Undo last drawing (Ctrl+Z)"
         onClick={onUndo}
+        title="Undo (Ctrl+Z)"
+        disabled={!canUndo}
         style={{
-          width: 36,
-          height: 28,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "transparent",
-          color: "var(--text-secondary)",
-          borderRadius: 4,
-          fontSize: 12,
-          cursor: "pointer",
-          border: "none",
+          ...btnBase,
+          background: "var(--bg-primary)",
+          color: canUndo ? "var(--text-primary)" : "var(--text-secondary)",
+          opacity: canUndo ? 1 : 0.4,
+          cursor: canUndo ? "pointer" : "default",
         }}
       >
         ↩
       </button>
-
-      {/* Clear all */}
       <button
-        title="Clear all drawings"
-        onClick={onClear}
+        onClick={onRedo}
+        title="Redo (Ctrl+Shift+Z)"
+        disabled={!canRedo}
         style={{
-          width: 36,
-          height: 28,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "transparent",
-          color: "var(--accent-red)",
-          borderRadius: 4,
-          fontSize: 13,
-          cursor: "pointer",
-          border: "none",
+          ...btnBase,
+          background: "var(--bg-primary)",
+          color: canRedo ? "var(--text-primary)" : "var(--text-secondary)",
+          opacity: canRedo ? 1 : 0.4,
+          cursor: canRedo ? "pointer" : "default",
         }}
       >
-        ✕
+        ↪
       </button>
 
-      {/* Active tool hint */}
-      {stepLabel && (
-        <div
+      <div style={{ width: 1, height: 20, background: "var(--border-color)", margin: "0 4px" }} />
+
+      {selectedId != null && (
+        <button
+          onClick={onRemoveSelected}
+          title="Delete selected drawing (Del)"
           style={{
-            position: "absolute",
-            left: 44,
-            top: 0,
-            background: "rgba(41,98,255,0.95)",
-            color: "white",
-            padding: "5px 10px",
-            borderRadius: 4,
+            ...btnBase,
+            background: "#ef535022",
+            color: "#ef5350",
+            borderColor: "#ef535044",
+          }}
+        >
+          🗑 Delete
+        </button>
+      )}
+
+      <button
+        onClick={onClearAll}
+        title="Clear all drawings"
+        style={{
+          ...btnBase,
+          background: "var(--bg-primary)",
+          color: "var(--text-secondary)",
+        }}
+      >
+        Clear All
+      </button>
+
+      {stepLabel && (
+        <span
+          style={{
+            marginLeft: 8,
             fontSize: 11,
+            color: "var(--accent-blue)",
             fontWeight: 600,
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
           }}
         >
           {stepLabel}
-        </div>
+        </span>
       )}
     </div>
   );

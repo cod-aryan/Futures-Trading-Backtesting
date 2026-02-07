@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchSymbols, fetchOHLCV } from "@/lib/api";
 
+const PAGE_SIZE = 500;
+
 /**
- * Hook to manage symbol list, OHLCV data loading, and price info.
+ * Hook to manage symbol list, OHLCV data loading with lazy pagination.
+ * Loads the latest PAGE_SIZE candles initially, then loads older data on demand.
  */
 export default function useMarketData(initialSymbol = "BTCUSDT", initialTimeframe = "1h") {
   const [symbols, setSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
@@ -14,6 +17,10 @@ export default function useMarketData(initialSymbol = "BTCUSDT", initialTimefram
   const [dataLoading, setDataLoading] = useState(false);
   const [lastPrice, setLastPrice] = useState(null);
   const [priceChange, setPriceChange] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const totalRef = useRef(0);
 
   // Load symbols on mount
   useEffect(() => {
@@ -24,30 +31,65 @@ export default function useMarketData(initialSymbol = "BTCUSDT", initialTimefram
       .catch(() => {});
   }, []);
 
-  // Load OHLCV when symbol/timeframe changes
+  // Load initial data when symbol/timeframe changes
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    const load = async () => {
+      setDataLoading(true);
+      setHasMore(true);
+      totalRef.current = 0;
+      try {
+        const { records, total } = await fetchOHLCV(selectedSymbol, timeframe, PAGE_SIZE);
+        if (cancelled) return;
+        totalRef.current = total;
+        setOhlcvData(records);
+        setHasMore(records.length < total);
+        if (records.length > 0) {
+          const last = records[records.length - 1];
+          setLastPrice(last.close);
+          if (records.length > 1) {
+            const prev = records[records.length - 2];
+            const change = ((last.close - prev.close) / prev.close) * 100;
+            setPriceChange(change);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load data:", e);
+      }
+      if (!cancelled) setDataLoading(false);
+    };
+    load();
+    return () => { cancelled = true; };
   }, [selectedSymbol, timeframe]);
 
-  const loadData = async () => {
-    setDataLoading(true);
+  // Load older data (called when user scrolls to the left edge)
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore || ohlcvData.length === 0) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
     try {
-      const data = await fetchOHLCV(selectedSymbol, timeframe, 10000);
-      setOhlcvData(data);
-      if (data.length > 0) {
-        const last = data[data.length - 1];
-        setLastPrice(last.close);
-        if (data.length > 1) {
-          const prev = data[data.length - 2];
-          const change = ((last.close - prev.close) / prev.close) * 100;
-          setPriceChange(change);
+      const oldestTime = ohlcvData[0].time;
+      const { records } = await fetchOHLCV(selectedSymbol, timeframe, PAGE_SIZE, oldestTime);
+      if (records.length === 0) {
+        setHasMore(false);
+      } else {
+        // Filter out any overlap
+        const existingFirstTime = ohlcvData[0].time;
+        const newCandles = records.filter((r) => r.time < existingFirstTime);
+        if (newCandles.length === 0) {
+          setHasMore(false);
+        } else {
+          setOhlcvData((prev) => [...newCandles, ...prev]);
+          // If we got fewer than requested, no more data
+          if (newCandles.length < PAGE_SIZE) setHasMore(false);
         }
       }
     } catch (e) {
-      console.error("Failed to load data:", e);
+      console.error("Failed to load more data:", e);
     }
-    setDataLoading(false);
-  };
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+  }, [hasMore, ohlcvData, selectedSymbol, timeframe]);
 
   return {
     symbols,
@@ -59,5 +101,8 @@ export default function useMarketData(initialSymbol = "BTCUSDT", initialTimefram
     dataLoading,
     lastPrice,
     priceChange,
+    hasMore,
+    loadMore,
+    loadingMore,
   };
 }

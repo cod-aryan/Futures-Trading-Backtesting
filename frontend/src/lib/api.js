@@ -6,12 +6,12 @@ export async function fetchSymbols() {
   return data.symbols || [];
 }
 
-export async function fetchOHLCV(symbol, timeframe = "1h", limit = 5000) {
-  const res = await fetch(
-    `${API_BASE}/api/ohlcv?symbol=${symbol}&timeframe=${timeframe}&limit=${limit}`
-  );
+export async function fetchOHLCV(symbol, timeframe = "1h", limit = 500, endTime = null) {
+  let url = `${API_BASE}/api/ohlcv?symbol=${symbol}&timeframe=${timeframe}&limit=${limit}`;
+  if (endTime != null) url += `&end_time=${endTime}`;
+  const res = await fetch(url);
   const data = await res.json();
-  return data.data || [];
+  return { records: data.data || [], total: data.total || 0 };
 }
 
 export async function runBacktest(params) {
