@@ -1,65 +1,279 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import dynamic from "next/dynamic";
+import Toolbar from "@/components/toolbar/Toolbar";
+import TradingPanel from "@/components/trading/TradingPanel";
+import BacktestPanel from "@/components/backtest/BacktestPanel";
+import BacktestResults from "@/components/backtest/BacktestResults";
+import useMarketData from "@/hooks/useMarketData";
+import useBacktest from "@/hooks/useBacktest";
+import useTrade from "@/hooks/useTrade";
+import useReplay from "@/hooks/useReplay";
+import useDrawings from "@/hooks/useDrawings";
+import DrawingToolbar from "@/components/replay/DrawingToolbar";
+import ReplayPanel from "@/components/replay/ReplayPanel";
+
+const Chart = dynamic(() => import("@/components/chart/Chart"), { ssr: false });
 
 export default function Home() {
+  const {
+    symbols,
+    selectedSymbol,
+    setSelectedSymbol,
+    timeframe,
+    setTimeframe,
+    ohlcvData,
+    dataLoading,
+    lastPrice,
+    priceChange,
+  } = useMarketData("BTCUSDT", "1h");
+
+  const [activeTab, setActiveTab] = useState("trade");
+  const [crosshairData, setCrosshairData] = useState(null);
+
+  const { backtestResult, loading, handleBacktest } = useBacktest();
+  const { handleManualTrade } = useTrade({
+    selectedSymbol,
+    timeframe,
+    crosshairData,
+    ohlcvData,
+  });
+
+  const replay = useReplay(ohlcvData);
+  const drawingTools = useDrawings(replay.placePosition);
+
+  const handleCrosshairMove = useCallback((data) => {
+    setCrosshairData(data);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") drawingTools.cancelTool();
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault();
+        drawingTools.removeLastDrawing();
+      }
+      if (activeTab === "practice" && replay.isActive) {
+        if (e.key === " " || e.key === "ArrowRight") {
+          e.preventDefault();
+          replay.stepForward(1);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeTab, replay, drawingTools]);
+
+  const chartData = activeTab === "practice" && replay.isActive
+    ? replay.visibleData
+    : ohlcvData;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      {/* Top Toolbar */}
+      <Toolbar
+        symbols={symbols}
+        selectedSymbol={selectedSymbol}
+        onSymbolChange={setSelectedSymbol}
+        timeframe={timeframe}
+        onTimeframeChange={setTimeframe}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      {/* Price Info Bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 24,
+          padding: "6px 16px",
+          background: "var(--bg-secondary)",
+          borderBottom: "1px solid var(--border-color)",
+          fontSize: 12,
+          flexShrink: 0,
+        }}
+      >
+        <div>
+          <span style={{ color: "var(--text-secondary)", marginRight: 6 }}>
+            {selectedSymbol}
+          </span>
+          <span
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color:
+                priceChange >= 0
+                  ? "var(--accent-green)"
+                  : "var(--accent-red)",
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            {crosshairData
+              ? crosshairData.close?.toFixed(2)
+              : lastPrice?.toFixed(2) || "—"}
+          </span>
+        </div>
+        {crosshairData && (
+          <>
+            <div>
+              <span style={{ color: "var(--text-secondary)" }}>O </span>
+              <span>{crosshairData.open?.toFixed(2)}</span>
+            </div>
+            <div>
+              <span style={{ color: "var(--text-secondary)" }}>H </span>
+              <span style={{ color: "var(--accent-green)" }}>
+                {crosshairData.high?.toFixed(2)}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: "var(--text-secondary)" }}>L </span>
+              <span style={{ color: "var(--accent-red)" }}>
+                {crosshairData.low?.toFixed(2)}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: "var(--text-secondary)" }}>C </span>
+              <span>{crosshairData.close?.toFixed(2)}</span>
+            </div>
+          </>
+        )}
+        {priceChange !== null && !crosshairData && (
+          <span
+            style={{
+              color:
+                priceChange >= 0
+                  ? "var(--accent-green)"
+                  : "var(--accent-red)",
+              fontWeight: 600,
+            }}
+          >
+            {priceChange >= 0 ? "+" : ""}
+            {priceChange.toFixed(2)}%
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        <span style={{ color: "var(--text-secondary)" }}>
+          {activeTab === "practice" && replay.isActive
+            ? `${replay.visibleCount.toLocaleString()} / ${ohlcvData.length.toLocaleString()} candles`
+            : `${ohlcvData.length.toLocaleString()} candles`}
+        </span>
+      </div>
+
+      {/* Main Content */}
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+        {/* Chart Area */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+          }}
+        >
+          {/* Chart */}
+          <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+            {dataLoading && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(19,23,34,0.8)",
+                  zIndex: 10,
+                }}
+              >
+                <div className="spinner" />
+              </div>
+            )}
+            {activeTab === "practice" && replay.isActive && (
+              <DrawingToolbar
+                activeTool={drawingTools.activeTool}
+                stepLabel={drawingTools.getStepLabel()}
+                onSelectTool={drawingTools.selectTool}
+                onClear={drawingTools.clearDrawings}
+                onUndo={drawingTools.removeLastDrawing}
+              />
+            )}
+            <Chart
+              data={chartData}
+              trades={activeTab === "backtest" ? backtestResult?.trades : null}
+              overlays={activeTab === "backtest" ? backtestResult?.overlay : null}
+              drawings={activeTab === "practice" ? drawingTools.drawings : []}
+              positions={activeTab === "practice" ? replay.positions : []}
+              activeTool={activeTab === "practice" ? drawingTools.activeTool : null}
+              onChartClick={activeTab === "practice" ? drawingTools.handleChartClick : null}
+              onCrosshairMove={handleCrosshairMove}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
+
+          {/* Bottom panel - Backtest Results (when backtest tab is active and we have results) */}
+          {activeTab === "backtest" && backtestResult && (
+            <div
+              style={{
+                height: 320,
+                borderTop: "1px solid var(--border-color)",
+                background: "var(--bg-secondary)",
+                overflowY: "auto",
+                flexShrink: 0,
+              }}
+            >
+              <BacktestResults result={backtestResult} />
+            </div>
+          )}
         </div>
-      </main>
+
+        {/* Right Sidebar */}
+        <div
+          style={{
+            width: 320,
+            flexShrink: 0,
+            background: "var(--bg-secondary)",
+            borderLeft: "1px solid var(--border-color)",
+            overflowY: "auto",
+          }}
+        >
+          {activeTab === "practice" ? (
+            <ReplayPanel
+              replay={replay}
+              onRemovePosition={replay.removePosition}
+            />
+          ) : activeTab === "trade" ? (
+            <TradingPanel
+              symbol={selectedSymbol}
+              currentPrice={
+                crosshairData?.close || lastPrice
+              }
+              onSubmitTrade={handleManualTrade}
+            />
+          ) : (
+            <BacktestPanel
+              symbol={selectedSymbol}
+              timeframe={timeframe}
+              onRunBacktest={handleBacktest}
+              loading={loading}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Loading overlay for backtest */}
+      {loading && (
+        <div className="loading-overlay">
+          <div style={{ textAlign: "center" }}>
+            <div className="spinner" style={{ margin: "0 auto 12px" }} />
+            <div style={{ color: "var(--text-primary)", fontSize: 14 }}>
+              Running backtest...
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

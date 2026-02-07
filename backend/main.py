@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+from routes.data import router as data_router
+from routes.backtest import router as backtest_router
+from routes.trade import router as trade_router
 
-# Enable CORS so Next.js can talk to FastAPI
+app = FastAPI(title="Trading Backtest API")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -11,10 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/api/backtest-result")
-async def get_result():
-    return {"status": "success", "pnl": 150.50}
+# ─── Include routers ──────────────────────────────────────────────────
+app.include_router(data_router)
+app.include_router(backtest_router)
+app.include_router(trade_router)
+
 
 @app.get("/")
-async def get_result():
-    return {"status": "success", "message": "Welcome to the Backtesting API!"}
+async def root():
+    return {"status": "ok", "message": "Trading Backtest API"}
