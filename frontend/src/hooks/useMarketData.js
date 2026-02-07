@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchSymbols, fetchOHLCV } from "@/lib/api";
 
-const PAGE_SIZE = 500;
+const PAGE_SIZE = 1000; // Number of candles to load per page (adjust as needed)
 
 /**
  * Hook to manage symbol list, OHLCV data loading with lazy pagination.
