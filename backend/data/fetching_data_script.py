@@ -26,17 +26,45 @@ for symbol in symbols:
     outfile = os.path.join(outdir, file_name)
     
     accumulator = []
+    desired_start = exchange.parse8601('2022-01-01T00:00:00Z')
     
     # --- Check for existing data to resume ---
     if os.path.exists(outfile):
         existing_df = pd.read_csv(outfile)
-        # We use the raw timestamp to calculate the next fetch start point
+        earliest_ts = int(existing_df['timestamp'].iloc[0])
+        
+        # --- Backfill: fetch older data if existing CSV starts after desired_start ---
+        if earliest_ts > desired_start:
+            print(f"⏪ Backfilling data from 2022-01-01 to earliest existing entry...")
+            backfill_since = desired_start
+            backfill_end = earliest_ts
+            while backfill_since < backfill_end:
+                try:
+                    ohlcv = exchange.fetch_ohlcv(symbol, timeframe_str, backfill_since, 1000)
+                    if not ohlcv:
+                        break
+                    df_temp = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    df_temp['datetime'] = pd.to_datetime(df_temp['timestamp'], unit='ms') + ist_offset
+                    df_temp = df_temp[['datetime', 'timestamp', 'open', 'high', 'low', 'close', 'volume']]
+                    # Only keep rows before existing data
+                    df_temp = df_temp[df_temp['timestamp'] < backfill_end]
+                    accumulator.append(df_temp)
+                    backfill_since = ohlcv[-1][0] + ms_1min
+                    print(f"Backfilled until (IST): {df_temp['datetime'].iloc[-1]}")
+                    time.sleep(exchange.rateLimit / 1000)
+                except Exception as e:
+                    print(f"Error backfilling {symbol}: {e}")
+                    time.sleep(10)
+                    continue
+            print(f"✅ Backfill complete.")
+        
+        # Now resume forward from the last timestamp
         since = int(existing_df['timestamp'].iloc[-1]) + ms_1min
         accumulator.append(existing_df)
         print(f"Resuming from last timestamp. Last IST entry: {existing_df['datetime'].iloc[-1]}")
     else:
-        # Start from Jan 1, 2024 (UTC)
-        since = exchange.parse8601('2024-01-01T00:00:00Z')
+        # Start from Jan 1, 2022 (UTC)
+        since = desired_start
 
     while since < exchange.milliseconds():
         try:
