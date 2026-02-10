@@ -39,6 +39,7 @@ export default function Chart({
   const volumeSeriesRef = useRef(null);
   const prevDataLenRef = useRef(0);
   const prevIntervalRef = useRef(0);
+  const prevFirstTimeRef = useRef(null);
   const renderIdRef = useRef(null);
 
   // Mutable refs
@@ -335,7 +336,7 @@ export default function Chart({
         if (orig.type === "horizontal") {
           // Only price movement
           onDrawingUpdateRef.current?.(dd.id, { price: orig.price + dPrice });
-        } else if (orig.type === "trendline" || orig.type === "ray" || orig.type === "fib") {
+        } else if (orig.type === "trendline" || orig.type === "ray" || orig.type === "fib" || orig.type === "rectangle") {
           if (dd.handle === "p1") {
             const newP1 = { time: curTime || orig.p1.time, price: curPrice };
             onDrawingUpdateRef.current?.(dd.id, { p1: newP1 });
@@ -414,21 +415,42 @@ export default function Chart({
       prevIntervalRef.current = interval;
 
       const added = data.length - prevLen;
+
+      // Detect whether new candles were prepended (load-more) or appended (replay stop)
+      const prevFirstTime = prevFirstTimeRef.current;
+      const newFirstTime = deduped.length > 0 ? deduped[0].time : null;
+      const isPrepend = prevFirstTime != null && newFirstTime != null && newFirstTime < prevFirstTime;
+
+      // Detect small replay steps (e.g. +1, +5, +20 candles) — keep view static
+      const isSmallAppend = added > 0 && added <= 50 && !isPrepend && prevLen > 0;
+
       if (prevLen === 0 || isTimeframeSwitch) {
         // First load or timeframe switch: show the last ~100 candles at a comfortable zoom
         const barsToShow = Math.min(100, data.length);
         ts.setVisibleLogicalRange({ from: data.length - barsToShow - 5, to: data.length + 5 });
-      } else if (savedLogical) {
-        // Shift the logical range by the number of candles added/prepended
-        // This keeps the exact same candles visible regardless of prepend or append
+      } else if (isSmallAppend && savedLogical) {
+        // Small replay step: keep the exact same logical range (no scrolling)
+        ts.setVisibleLogicalRange(savedLogical);
+      } else if (added !== 0 && !isPrepend && savedTimeRange) {
+        // Candles appended or truncated (replay start/stop): preserve the time-based view
+        // so drawings stay on screen
+        try { ts.setVisibleRange(savedTimeRange); } catch (_) {
+          // If saved range is outside new data bounds, show the end of new data
+          const barsToShow = Math.min(100, data.length);
+          ts.setVisibleLogicalRange({ from: data.length - barsToShow - 5, to: data.length + 5 });
+        }
+      } else if (savedLogical && isPrepend) {
+        // Candles prepended (load more history): shift logical range to keep same candles visible
         ts.setVisibleLogicalRange({ from: savedLogical.from + added, to: savedLogical.to + added });
       }
     }
     prevDataLenRef.current = data.length;
+    prevFirstTimeRef.current = deduped.length > 0 ? deduped[0].time : null;
     scheduleRender();
-    // Delayed re-render to catch coordinate updates after chart processes new data
-    const t = setTimeout(scheduleRender, 60);
-    return () => clearTimeout(t);
+    // Delayed re-renders to catch coordinate updates after chart processes new data
+    const t1 = setTimeout(scheduleRender, 60);
+    const t2 = setTimeout(scheduleRender, 200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [data, scheduleRender]);
 
   // ── Re-render on drawing / position changes ─────────────────────

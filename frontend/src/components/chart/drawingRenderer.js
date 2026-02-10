@@ -24,6 +24,7 @@ export function renderAllDrawings(
         case "trendline":  renderTrendLine(ctx, chart, series, d, hl); break;
         case "ray":        renderRay(ctx, chart, series, d, w, h, hl); break;
         case "fib":        renderFib(ctx, chart, series, d, w, hl); break;
+        case "rectangle": renderRectangle(ctx, chart, series, d, w, hl); break;
       }
     } catch (_) {}
   }
@@ -59,6 +60,21 @@ export function hitTestDrawing(drawings, chart, series, mx, my, threshold = 7) {
           const y = series.priceToCoordinate(price);
           if (y != null && Math.abs(my - y) <= threshold) return d.id;
         }
+      } else if (d.type === "rectangle") {
+        const y1 = series.priceToCoordinate(d.p1.price);
+        const y2 = series.priceToCoordinate(d.p2.price);
+        if (y1 == null || y2 == null) continue;
+        const x1 = chart.timeScale().timeToCoordinate(d.p1.time);
+        const x2 = chart.timeScale().timeToCoordinate(d.p2.time);
+        const left = x1 != null && x2 != null ? Math.min(x1, x2) : (x1 ?? x2 ?? 0);
+        const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+        // Right edge is infinite (canvas width is unknown here, use large number)
+        const right = 99999;
+        const nearLeft = Math.abs(mx - left) <= threshold && my >= top - threshold && my <= bottom + threshold;
+        const nearTop = Math.abs(my - top) <= threshold && mx >= left - threshold;
+        const nearBottom = Math.abs(my - bottom) <= threshold && mx >= left - threshold;
+        if (nearLeft || nearTop || nearBottom) return d.id;
+        if (mx >= left && my >= top && my <= bottom) return d.id;
       }
     } catch (_) {}
   }
@@ -96,6 +112,23 @@ export function hitTestDrawingHandle(drawings, chart, series, mx, my, handleR = 
           const price = p1 + range * (1 - lev);
           const y = series.priceToCoordinate(price);
           if (y != null && Math.abs(my - y) <= bodyThreshold) return { id: d.id, handle: "body" };
+        }
+      } else if (d.type === "rectangle") {
+        const x1 = ts.timeToCoordinate(d.p1.time), y1 = series.priceToCoordinate(d.p1.price);
+        const x2 = ts.timeToCoordinate(d.p2.time), y2 = series.priceToCoordinate(d.p2.price);
+        if (x1 != null && y1 != null && Math.hypot(mx - x1, my - y1) <= handleR) return { id: d.id, handle: "p1" };
+        if (x2 != null && y2 != null && Math.hypot(mx - x2, my - y2) <= handleR) return { id: d.id, handle: "p2" };
+        // Also check the other two corners (p1.time,p2.price) and (p2.time,p1.price)
+        if (x1 != null && y2 != null && Math.hypot(mx - x1, my - y2) <= handleR) return { id: d.id, handle: "p1" };
+        if (x2 != null && y1 != null && Math.hypot(mx - x2, my - y1) <= handleR) return { id: d.id, handle: "p2" };
+        if (y1 != null && y2 != null) {
+          const left = x1 != null && x2 != null ? Math.min(x1, x2) : (x1 ?? x2 ?? 0);
+          const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+          const nearLeft = Math.abs(mx - left) <= bodyThreshold && my >= top && my <= bottom;
+          const nearTop = Math.abs(my - top) <= bodyThreshold && mx >= left;
+          const nearBottom = Math.abs(my - bottom) <= bodyThreshold && mx >= left;
+          const inside = mx >= left && my >= top && my <= bottom;
+          if (nearLeft || nearTop || nearBottom || inside) return { id: d.id, handle: "body" };
         }
       }
     } catch (_) {}
@@ -325,6 +358,82 @@ function renderFib(ctx, chart, series, d, w, highlight) {
     if (y1 != null) drawHandle(ctx, x1Raw, y1, FIB_COLORS[0]);
     if (y2 != null) drawHandle(ctx, x2Raw, y2, FIB_COLORS[FIB_COLORS.length - 1]);
   }
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RECTANGLE (Support / Resistance Zone)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function renderRectangle(ctx, chart, series, d, w, highlight) {
+  const x1 = chart.timeScale().timeToCoordinate(d.p1.time);
+  const y1 = series.priceToCoordinate(d.p1.price);
+  const y2 = series.priceToCoordinate(d.p2.price);
+  // Only need y coordinates and the left anchor; right side extends to canvas edge
+  if (y1 == null || y2 == null) return;
+
+  // Left edge = leftmost anchor (or 0 if off-screen left)
+  const x2 = chart.timeScale().timeToCoordinate(d.p2.time);
+  const left = x1 != null && x2 != null ? Math.min(x1, x2) : (x1 ?? x2 ?? 0);
+  const anchorRight = x1 != null && x2 != null ? Math.max(x1, x2) : (x1 ?? x2 ?? 0);
+  // Right edge always extends to the full canvas width (infinite)
+  const right = w;
+  const top = Math.min(y1, y2);
+  const bottom = Math.max(y1, y2);
+  const rw = right - left;
+  const rh = bottom - top;
+  const color = d.color || "#2196f3";
+
+  ctx.save();
+
+  // Filled zone — extends to the right edge of the canvas
+  ctx.fillStyle = color;
+  ctx.globalAlpha = highlight ? 0.18 : 0.10;
+  ctx.fillRect(left, top, rw, rh);
+  ctx.globalAlpha = 1;
+
+  // Border
+  ctx.strokeStyle = color;
+  ctx.lineWidth = highlight ? 2.5 : 1.5;
+  // Draw top and bottom lines across full width
+  ctx.beginPath();
+  ctx.moveTo(left, top); ctx.lineTo(right, top);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(left, bottom); ctx.lineTo(right, bottom);
+  ctx.stroke();
+  // Left edge vertical line
+  ctx.beginPath();
+  ctx.moveTo(left, top); ctx.lineTo(left, bottom);
+  ctx.stroke();
+  // Dashed right-extend indicator at the original p2 anchor
+  if (x1 != null && x2 != null) {
+    ctx.setLineDash([4, 4]);
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(anchorRight, top); ctx.lineTo(anchorRight, bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  if (highlight) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(right, top); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(left, bottom); ctx.lineTo(right, bottom); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Handles at the two anchor corners (left side)
+    if (x1 != null) { drawHandle(ctx, x1, y1, color); drawHandle(ctx, x1, y2, color); }
+    if (x2 != null) { drawHandle(ctx, x2, y2, color); drawHandle(ctx, x2, y1, color); }
+  }
+
+  // Price labels on right side of visible area
+  const highPrice = Math.max(d.p1.price, d.p2.price);
+  const lowPrice = Math.min(d.p1.price, d.p2.price);
+  pill(ctx, highPrice.toFixed(2), w - 8, top, color, "right");
+  pill(ctx, lowPrice.toFixed(2), w - 8, bottom, color, "right");
+
   ctx.restore();
 }
 

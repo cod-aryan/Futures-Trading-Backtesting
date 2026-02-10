@@ -20,6 +20,7 @@ export default function DrawingToolbar({
     { id: "trendline", label: "╲", title: "Trend Line" },
     { id: "ray", label: "→", title: "Ray" },
     { id: "fib", label: "Fib", title: "Fibonacci Retracement" },
+    { id: "rectangle", label: "▭", title: "Rectangle (Support/Resistance)" },
     { id: "long-position", label: "▲ Long", title: "Long Position" },
     { id: "short-position", label: "▼ Short", title: "Short Position" },
   ];

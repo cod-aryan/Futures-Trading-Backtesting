@@ -7,6 +7,7 @@ const TOOL_CLICK_COUNTS = {
   trendline: 2,
   ray: 2,
   fib: 2,
+  rectangle: 2,
   "long-position": 3,
   "short-position": 3,
 };
@@ -16,6 +17,7 @@ const TOOL_STEP_LABELS = {
   trendline: ["Click start point", "Click end point"],
   ray: ["Click origin point", "Click direction point"],
   fib: ["Click first level", "Click second level"],
+  rectangle: ["Click first corner", "Click opposite corner"],
   "long-position": ["Click entry price", "Click stop loss", "Click take profit"],
   "short-position": ["Click entry price", "Click stop loss", "Click take profit"],
 };
@@ -139,6 +141,9 @@ export default function useDrawings(onPositionPlace, storageKey) {
             break;
           case "fib":
             setDrawings((p) => { pushToHistory(p); return [...p, { id, type: "fib", p1: pts[0], p2: pts[1] }]; });
+            break;
+          case "rectangle":
+            setDrawings((p) => { pushToHistory(p); return [...p, { id, type: "rectangle", p1: pts[0], p2: pts[1], color: "#2196f3" }]; });
             break;
           case "long-position":
             if (onPositionPlace) onPositionPlace("long", pts[0].price, pts[1].price, pts[2].price);

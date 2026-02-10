@@ -163,21 +163,19 @@ export default function Home() {
         replayActive={isActive}
       />
 
-      {/* Drawing toolbar (always visible when replay active) */}
-      {isActive && (
-        <DrawingToolbar
-          activeTool={activeTool}
-          selectedId={selectedId}
-          stepLabel={getStepLabel()}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onSelectTool={selectTool}
-          onRemoveSelected={removeSelected}
-          onClearAll={clearDrawings}
-          onUndo={undo}
-          onRedo={redo}
-        />
-      )}
+      {/* Drawing toolbar (always visible) */}
+      <DrawingToolbar
+        activeTool={activeTool}
+        selectedId={selectedId}
+        stepLabel={getStepLabel()}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onSelectTool={selectTool}
+        onRemoveSelected={removeSelected}
+        onClearAll={clearDrawings}
+        onUndo={undo}
+        onRedo={redo}
+      />
 
       {/* Main content area */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
